@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gestion Commerce – PWA</title>
+  <meta name="theme-color" content="#0ea5e9" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print { .no-print{display:none!important} body{background:white} }
+    html,body{height:100%}
+    .scroll-soft{scroll-behavior:smooth}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 scroll-soft">
+  <div id="app" class="min-h-screen">
+    <!-- Topbar -->
+    <header class="no-print sticky top-0 z-40 backdrop-blur bg-white/80 border-b border-slate-200">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-2xl bg-sky-500 flex items-center justify-center text-white font-bold">GC</div>
+        <div class="flex-1">
+          <h1 class="text-lg font-semibold">Gestion de Commerce</h1>
+          <p class="text-xs text-slate-500" id="orgName">Prêt à l’emploi – hors‑ligne (PWA)</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnExport" class="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-sm">Exporter</button>
+          <label class="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-900 text-sm cursor-pointer">Importer
+            <input id="importFile" type="file" accept="application/json" class="hidden" />
+          </label>
+          <button id="btnPrint" class="px-3 py-1.5 rounded-xl bg-white border text-sm">Imprimer ticket</button>
+          <button id="btnReset" class="px-3 py-1.5 rounded-xl bg-white border text-sm" title="Réinitialiser (mot de passe requis)">Réinitialiser</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="max-w-6xl mx-auto p-4 grid md:grid-cols-4 gap-4">
+      <!-- Sidebar Nav -->
+      <nav class="no-print md:col-span-1">
+        <ul class="space-y-2" id="nav"></ul>
+        <div class="mt-6 p-3 rounded-2xl bg-white border">
+          <h3 class="font-semibold mb-2">Session</h3>
+          <div class="text-sm text-slate-600">
+            Utilisateur: <span id="userDisplay" class="font-medium">—</span>
+          </div>
+          <div class="mt-2 flex gap-2">
+            <input id="pinInput" type="password" placeholder="Code PIN (4+)" class="flex-1 px-3 py-2 rounded-xl border" />
+            <button id="btnLogin" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Ouvrir</button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Views -->
+      <section class="md:col-span-3 space-y-4" id="views">
+        <!-- Dashboard -->
+        <div data-view="dashboard" class="view hidden">
+          <div class="grid md:grid-cols-3 gap-3">
+            <div class="rounded-2xl bg-white p-4 border">
+              <div class="text-sm text-slate-500">Chiffre d’affaires (30j)</div>
+              <div id="kpiCA" class="text-2xl font-semibold mt-1">0</div>
+            </div>
+            <div class="rounded-2xl bg-white p-4 border">
+              <div class="text-sm text-slate-500">Ventes (30j)</div>
+              <div id="kpiSalesCount" class="text-2xl font-semibold mt-1">0</div>
+            </div>
+            <div class="rounded-2xl bg-white p-4 border">
+              <div class="text-sm text-slate-500">Stock – articles</div>
+              <div id="kpiStock" class="text-2xl font-semibold mt-1">0</div>
+            </div>
+          </div>
+          <div class="rounded-2xl bg-white p-4 border mt-3">
+            <h3 class="font-semibold mb-3">Activité rapide</h3>
+            <div class="flex gap-2 flex-wrap">
+              <input id="quickSearch" placeholder="Chercher produit…" class="px-3 py-2 rounded-xl border flex-1 min-w-[220px]" />
+              <input id="quickQty" type="number" min="1" value="1" class="w-24 px-3 py-2 rounded-xl border" />
+              <button id="btnQuickAdd" class="px-4 py-2 rounded-xl bg-slate-900 text-white">Ajouter au panier</button>
+              <button id="btnCheckout" class="px-4 py-2 rounded-xl bg-emerald-600 text-white">Encaisser</button>
+            </div>
+            <div id="cart" class="mt-3 divide-y"></div>
+          </div>
+        </div>
+
+        <!-- Produits -->
+        <div data-view="produits" class="view hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold">Produits</h3>
+            <button id="btnNewProduct" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Nouveau</button>
+          </div>
+          <div class="rounded-2xl bg-white p-3 border">
+            <input id="productSearch" placeholder="Rechercher…" class="px-3 py-2 rounded-xl border w-full">
+            <div id="productList" class="mt-3 grid md:grid-cols-2 gap-2"></div>
+          </div>
+        </div>
+
+        <!-- Achats -->
+        <div data-view="achats" class="view hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold">Achats (entrée stock)</h3>
+            <button id="btnNewPurchase" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Nouvel achat</button>
+          </div>
+          <div class="rounded-2xl bg-white p-3 border">
+            <div id="purchaseList" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Ventes -->
+        <div data-view="ventes" class="view hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold">Ventes</h3>
+            <button id="btnNewSale" class="px-3 py-2 rounded-xl bg-emerald-600 text-white">Nouvelle vente</button>
+          </div>
+          <div class="rounded-2xl bg-white p-3 border">
+            <div id="saleList" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Clients -->
+        <div data-view="clients" class="view hidden">
+          <div class="flex items-center justify-between mb-3"><h3 class="font-semibold">Clients</h3>
+            <button id="btnNewClient" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Nouveau client</button></div>
+          <div class="rounded-2xl bg-white p-3 border" id="clientList"></div>
+        </div>
+
+        <!-- Fournisseurs -->
+        <div data-view="fournisseurs" class="view hidden">
+          <div class="flex items-center justify-between mb-3"><h3 class="font-semibold">Fournisseurs</h3>
+            <button id="btnNewSupplier" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Nouveau fournisseur</button></div>
+          <div class="rounded-2xl bg-white p-3 border" id="supplierList"></div>
+        </div>
+
+        <!-- Dépenses -->
+        <div data-view="depenses" class="view hidden">
+          <div class="flex items-center justify-between mb-3"><h3 class="font-semibold">Dépenses</h3>
+            <button id="btnNewExpense" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Nouvelle dépense</button></div>
+          <div class="rounded-2xl bg-white p-3 border" id="expenseList"></div>
+        </div>
+
+        <!-- Rapports -->
+        <div data-view="rapports" class="view hidden">
+          <div class="rounded-2xl bg-white p-4 border">
+            <h3 class="font-semibold mb-3">Rapports</h3>
+            <div class="grid md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-sm">Période</label>
+                <div class="flex gap-2 mt-1">
+                  <input type="date" id="fromDate" class="px-3 py-2 rounded-xl border" />
+                  <input type="date" id="toDate" class="px-3 py-2 rounded-xl border" />
+                  <button id="btnRunReport" class="px-3 py-2 rounded-xl bg-slate-900 text-white">Générer</button>
+                </div>
+                <div id="reportSummary" class="mt-3 text-sm"></div>
+              </div>
+              <div>
+                <button id="btnExportCSV" class="px-3 py-2 rounded-xl bg-white border">Exporter ventes CSV</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paramètres -->
+        <div data-view="parametres" class="view hidden">
+          <div class="rounded-2xl bg-white p-4 border space-y-3">
+            <h3 class="font-semibold">Paramètres</h3>
+            <div class="grid md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-sm">Nom du commerce</label>
+                <input id="orgInput" class="mt-1 w-full px-3 py-2 rounded-xl border" placeholder="Ex: Boutique Sandiara" />
+              </div>
+              <div>
+                <label class="text-sm">Devise (affichage)</label>
+                <input id="currencyInput" class="mt-1 w-full px-3 py-2 rounded-xl border" placeholder="Ex: FCFA" />
+              </div>
+              <div>
+                <label class="text-sm">PIN administrateur</label>
+                <input id="adminPinInput" type="password" class="mt-1 w-full px-3 py-2 rounded-xl border" placeholder="Définir / changer" />
+              </div>
+            </div>
+            <button id="btnSaveSettings" class="px-3 py-2 rounded-xl bg-sky-500 text-white">Enregistrer</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modals root -->
+    <div id="modals"></div>
+  </div>
+
+  <script>
+    /******************** Utils ********************/
+    const LS = {
+      get: (k, d) => {
+        try { return JSON.parse(localStorage.getItem(k)) ?? d } catch(e){ return d }
+      },
+      set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
+      del: (k) => localStorage.removeItem(k)
+    };
+    const DB = {
+      key: 'gc_data_v1',
+      read(){ return LS.get(this.key, {products:[], sales:[], purchases:[], clients:[], suppliers:[], expenses:[], settings:{org:'Mon Commerce', currency:'FCFA', adminPin:''}}) },
+      write(d){ LS.set(this.key, d); return d; },
+      reset(){ LS.del(this.key) }
+    };
+    const fmt = (n, cur) => new Intl.NumberFormat('fr-FR', {maximumFractionDigits:0}).format(n) + (cur?(' '+cur):'');
+    const uid = () => Math.random().toString(36).slice(2,9);
+    const todayISO = () => new Date().toISOString().slice(0,10);
+
+    /******************** State ********************/
+    let state = DB.read();
+    let currentUser = null; // {name:'Admin'} when PIN ok
+    let cart = []; // [{pid, name, price, qty}]
+
+    /******************** Navigation ********************/
+    const views = [
+      {id:'dashboard', label:'Tableau de bord'},
+      {id:'produits', label:'Produits'},
+      {id:'achats', label:'Achats'},
+      {id:'ventes', label:'Ventes'},
+      {id:'clients', label:'Clients'},
+      {id:'fournisseurs', label:'Fournisseurs'},
+      {id:'depenses', label:'Dépenses'},
+      {id:'rapports', label:'Rapports'},
+      {id:'parametres', label:'Paramètres'}
+    ];
+    const navUl = document.getElementById('nav');
+    let activeView = 'dashboard';
+    function renderNav(){
+      navUl.innerHTML = '';
+      views.forEach(v=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<button data-goto="${v.id}" class="w-full text-left px-3 py-2 rounded-xl ${activeView===v.id?'bg-slate-900 text-white':'bg-white border'}">${v.label}</button>`;
+        navUl.appendChild(li);
+      })
+    }
+    function showView(id){
+      activeView = id;
+      document.querySelectorAll('.view').forEach(el=>el.classList.add('hidden'));
+      document.querySelector(`[data-view="${id}"]`).classList.remove('hidden');
+      renderNav();
+      if(id==='dashboard') refreshDashboard();
+      if(id==='produits') renderProducts();
+      if(id==='achats') renderPurchases();
+      if(id==='ventes') renderSales();
+      if(id==='clients') renderClients();
+      if(id==='fournisseurs') renderSuppliers();
+      if(id==='depenses') renderExpenses();
+    }
+    navUl.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button[data-goto]');
+      if(!btn) return; showView(btn.dataset.goto);
+    });
+
+    /******************** Auth (simple PIN) ********************/
+    const pinInput = document.getElementById('pinInput');
+    const btnLogin = document.getElementById('btnLogin');
+    const userDisplay = document.getElementById('userDisplay');
+    function updateUser(){ userDisplay.textContent = currentUser? 'Admin' : '—'; }
+    btnLogin.onclick = ()=>{
+      const pin = pinInput.value.trim();
+      if(!state.settings.adminPin){
+        state.settings.adminPin = pin; DB.write(state); currentUser = {name:'Admin'}; alert('PIN défini.');
+      } else if(pin && pin===state.settings.adminPin){ currentUser = {name:'Admin'}; }
+      else { alert('PIN invalide'); return; }
+      updateUser();
+    };
+
+    /******************** Settings ********************/
+    const orgInput = document.getElementById('orgInput');
+    const currencyInput = document.getElementById('currencyInput');
+    const adminPinInput = document.getElementById('adminPinInput');
+    const btnSaveSettings = document.getElementById('btnSaveSettings');
+    const orgName = document.getElementById('orgName');
+    function loadSettings(){
+      orgInput.value = state.settings.org || '';
+      currencyInput.value = state.settings.currency || 'FCFA';
+      adminPinInput.value = '';
+      orgName.textContent = state.settings.org + ' – PWA hors‑ligne';
+    }
+    btnSaveSettings.onclick = ()=>{
+      if(adminPinInput.value) state.settings.adminPin = adminPinInput.value.trim();
+      state.settings.org = orgInput.value.trim() || 'Mon Commerce';
+      state.settings.currency = currencyInput.value.trim() || 'FCFA';
+      DB.write(state); loadSettings(); alert('Paramètres enregistrés');
+    };
+
+    /******************** Dashboard + Cart ********************/
+    const kpiCA = document.getElementById('kpiCA');
+    const kpiSalesCount = document.getElementById('kpiSalesCount');
+    const kpiStock = document.getElementById('kpiStock');
+    const quickSearch = document.getElementById('quickSearch');
+    const quickQty = document.getElementById('quickQty');
+    const btnQuickAdd = document.getElementById('btnQuickAdd');
+    const btnCheckout = document.getElementById('btnCheckout');
+    const cartDiv = document.getElementById('cart');
+
+    function refreshDashboard(){
+      const since = Date.now() - 30*24*3600*1000;
+      const sales30 = state.sales.filter(s=>new Date(s.date).getTime()>=since);
+      const ca = sales30.reduce((t,s)=> t + s.items.reduce((x,i)=>x + i.price*i.qty,0), 0);
+      const stockCount = state.products.reduce((t,p)=> t + (p.qty||0), 0);
+      kpiCA.textContent = fmt(ca, state.settings.currency);
+      kpiSalesCount.textContent = sales30.length;
+      kpiStock.textContent = stockCount;
+      renderCart();
+    }
+    function renderCart(){
+      cartDiv.innerHTML = '';
+      if(cart.length===0){ cartDiv.innerHTML = '<div class="text-sm text-slate-500">Panier vide.</div>'; return; }
+      cart.forEach((it, idx)=>{
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between py-2';
+        row.innerHTML = `<div class="flex-1"><div class="font-medium">${it.name}</div><div class="text-xs text-slate-500">${fmt(it.price, state.settings.currency)} × <input type="number" min="1" value="${it.qty}" data-idx="${idx}" class="w-16 px-2 py-1 rounded-lg border inline-block"></div></div><div class="font-semibold">${fmt(it.price*it.qty, state.settings.currency)}</div><button data-rm="${idx}" class="ml-3 px-3 py-1 rounded-lg bg-white border">Retirer</button>`;
+        cartDiv.appendChild(row);
+      });
+    }
+    cartDiv.addEventListener('change', (e)=>{
+      const inp = e.target.closest('input[data-idx]');
+      if(!inp) return; const i = +inp.dataset.idx; cart[i].qty = Math.max(1, +inp.value||1); renderCart();
+    });
+    cartDiv.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button[data-rm]'); if(!btn) return; cart.splice(+btn.dataset.rm,1); renderCart();
+    });
+    btnQuickAdd.onclick = ()=>{
+      const q = quickSearch.value.trim().toLowerCase(); if(!q) return;
+      const prod = state.products.find(p=> (p.sku||'').toLowerCase()===q || p.name.toLowerCase().includes(q));
+      if(!prod){ alert('Produit introuvable'); return; }
+      const qty = Math.max(1, +quickQty.value||1);
+      const existing = cart.find(i=>i.pid===prod.id);
+      if(existing) existing.qty += qty; else cart.push({pid:prod.id, name:prod.name, price:prod.price||0, qty});
+      renderCart();
+    };
+    btnCheckout.onclick = ()=>{
+      if(cart.length===0) return alert('Panier vide');
+      // stock check
+      for(const it of cart){
+        const p = state.products.find(x=>x.id===it.pid);
+        if(p && p.qty < it.qty) return alert('Stock insuffisant pour '+p.name);
+      }
+      const sale = { id: uid(), date: new Date().toISOString(), items: cart.map(i=>({...i})) };
+      state.sales.unshift(sale);
+      // decrement stock
+      cart.forEach(it=>{ const p = state.products.find(x=>x.id===it.pid); if(p) p.qty -= it.qty; });
+      DB.write(state); cart = []; refreshDashboard(); openReceipt(sale);
+    };
+
+    function openReceipt(sale){
+      const org = state.settings.org; const cur = state.settings.currency;
+      const total = sale.items.reduce((t,i)=>t+i.price*i.qty,0);
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang=fr><head><meta charset=utf-8><title>Ticket</title><style>body{font-family:system-ui,Segoe UI,Roboto;max-width:380px;margin:0 auto;padding:16px}h1{font-size:16px;margin:0 0 8px}table{width:100%;border-collapse:collapse}td{padding:4px 0}tfoot td{border-top:1px dashed #999;padding-top:6px;font-weight:600}@media print{.no-print{display:none}}</style></head><body>
+        <h1>${org}</h1>
+        <div style="font-size:12px;color:#555">Ticket #${sale.id}<br>${new Date(sale.date).toLocaleString('fr-FR')}</div>
+        <hr>
+        <table>`);
+      sale.items.forEach(i=>{
+        win.document.write(`<tr><td>${i.name} × ${i.qty}</td><td style=text-align:right>${fmt(i.price* i.qty, cur)}</td></tr>`)
+      });
+      win.document.write(`<tfoot><tr><td>Total</td><td style=text-align:right>${fmt(total, cur)}</td></tr></tfoot></table>
+        <p style="font-size:12px;color:#666">Merci et à bientôt.</p>
+        <button class="no-print" onclick="window.print()">Imprimer</button>
+      </body></html>`);
+      win.document.close();
+    }
+
+    document.getElementById('btnPrint').onclick = ()=>{
+      const last = state.sales[0]; if(!last) return alert('Aucun ticket'); openReceipt(last);
+    };
+
+    /******************** Produits ********************/
+    const productList = document.getElementById('productList');
+    const productSearch = document.getElementById('productSearch');
+    document.getElementById('btnNewProduct').onclick = ()=> openProductModal();
+    productSearch.oninput = renderProducts;
+
+    function renderProducts(){
+      const q = (productSearch.value||'').toLowerCase();
+      const list = state.products.filter(p=> !q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+      productList.innerHTML = '';
+      list.forEach(p=>{
+        const card = document.createElement('div');
+        card.className = 'p-3 rounded-2xl border bg-white flex items-center gap-3';
+        card.innerHTML = `
+          <div class="flex-1">
+            <div class="font-semibold">${p.name}</div>
+            <div class="text-xs text-slate-500">SKU: ${p.sku||'-'} · Prix: ${fmt(p.price||0, state.settings.currency)} · Stock: ${p.qty||0}</div>
+          </div>
+          <div class="flex gap-2">
+            <button data-edit="${p.id}" class="px-3 py-1 rounded-xl bg-white border">Modifier</button>
+            <button data-del="${p.id}" class="px-3 py-1 rounded-xl bg-rose-600 text-white">Suppr.</button>
+          </div>`;
+        productList.appendChild(card);
+      })
+    }
+    productList.addEventListener('click', (e)=>{
+      const ed = e.target.closest('button[data-edit]'); if(ed){ const p = state.products.find(x=>x.id===ed.dataset.edit); return openProductModal(p); }
+      const del = e.target.closest('button[data-del]'); if(del){
+        if(!confirm('Supprimer ce produit ?')) return;
+        state.products = state.products.filter(x=>x.id!==del.dataset.del); DB.write(state); renderProducts(); refreshDashboard();
+      }
+    });
+
+    function openProductModal(p={}){
+      const id = p.id || uid();
+      const wrap = modalShell(`<h3 class='font-semibold text-lg'>${p.id?'Modifier':'Nouveau'} produit</h3>
+        <div class='grid md:grid-cols-2 gap-3 mt-3'>
+          <div><label class='text-sm'>Nom</label><input id='m_name' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${p.name||''}' /></div>
+          <div><label class='text-sm'>SKU</label><input id='m_sku' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${p.sku||''}' /></div>
+          <div><label class='text-sm'>Prix de vente</label><input id='m_price' type='number' step='0.01' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${p.price||0}' /></div>
+          <div><label class='text-sm'>Stock (Qté)</label><input id='m_qty' type='number' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${p.qty||0}' /></div>
+        </div>
+        <div class='mt-4 flex justify-end gap-2'>
+          <button data-close class='px-3 py-2 rounded-xl bg-white border'>Annuler</button>
+          <button id='m_save' class='px-3 py-2 rounded-xl bg-sky-600 text-white'>Enregistrer</button>
+        </div>`);
+      wrap.querySelector('#m_save').onclick = ()=>{
+        const item = {
+          id,
+          name: wrap.querySelector('#m_name').value.trim(),
+          sku: wrap.querySelector('#m_sku').value.trim(),
+          price: +wrap.querySelector('#m_price').value||0,
+          qty: +wrap.querySelector('#m_qty').value||0,
+        };
+        if(!item.name) return alert('Nom requis');
+        const existing = state.products.find(x=>x.id===id);
+        if(existing) Object.assign(existing, item); else state.products.unshift(item);
+        DB.write(state); closeModal(wrap); renderProducts(); refreshDashboard();
+      };
+    }
+
+    /******************** Achats (Purchases) ********************/
+    const purchaseList = document.getElementById('purchaseList');
+    document.getElementById('btnNewPurchase').onclick = ()=> openPurchaseModal();
+    function renderPurchases(){
+      purchaseList.innerHTML = state.purchases.map(p=>`<div class='p-3 rounded-2xl border bg-white'>
+        <div class='font-semibold'>Achat #${p.id} – ${new Date(p.date).toLocaleDateString('fr-FR')}</div>
+        <div class='text-xs text-slate-500'>Fournisseur: ${p.supplier||'-'} · ${p.items.length} article(s) · Total: ${fmt(p.total, state.settings.currency)}</div>
+      </div>`).join('');
+    }
+    function openPurchaseModal(){
+      const items = [];
+      const wrap = modalShell(`<h3 class='font-semibold text-lg'>Nouvel achat</h3>
+        <div class='mt-2'><label class='text-sm'>Fournisseur</label><input id='sup' class='mt-1 w-full px-3 py-2 rounded-xl border' placeholder='Nom du fournisseur' /></div>
+        <div class='mt-3 p-3 rounded-2xl border bg-slate-50'>
+          <div class='flex gap-2'>
+            <input id='sProd' placeholder='Produit ou SKU' class='flex-1 px-3 py-2 rounded-xl border'>
+            <input id='sQty' type='number' min='1' value='1' class='w-24 px-3 py-2 rounded-xl border'>
+            <input id='sPrice' type='number' step='0.01' placeholder='Prix d\'achat' class='w-36 px-3 py-2 rounded-xl border'>
+            <button id='addIt' class='px-3 py-2 rounded-xl bg-slate-900 text-white'>Ajouter</button>
+          </div>
+          <div id='itList' class='mt-2 space-y-1 text-sm'></div>
+        </div>
+        <div class='mt-3 flex justify-end gap-2'>
+          <button data-close class='px-3 py-2 rounded-xl bg-white border'>Annuler</button>
+          <button id='savePurchase' class='px-3 py-2 rounded-xl bg-sky-600 text-white'>Enregistrer</button>
+        </div>`);
+      const itList = wrap.querySelector('#itList');
+      function render(){
+        itList.innerHTML = items.map((i,idx)=>`<div class='flex justify-between'><div>${i.name} × ${i.qty} @ ${fmt(i.price, state.settings.currency)}</div><button data-rm='${idx}' class='px-2 rounded-lg border bg-white'>X</button></div>`).join('');
+      }
+      wrap.querySelector('#addIt').onclick = ()=>{
+        const q = wrap.querySelector('#sProd').value.trim().toLowerCase(); if(!q) return;
+        const p = state.products.find(x=> (x.sku||'').toLowerCase()===q || x.name.toLowerCase().includes(q)); if(!p) return alert('Produit introuvable');
+        const qty = Math.max(1, +wrap.querySelector('#sQty').value||1);
+        const price = Math.max(0, +wrap.querySelector('#sPrice').value||0);
+        items.push({pid:p.id, name:p.name, qty, price}); render();
+      };
+      itList.addEventListener('click', (e)=>{ const b=e.target.closest('button[data-rm]'); if(!b) return; items.splice(+b.dataset.rm,1); render(); });
+      wrap.querySelector('#savePurchase').onclick = ()=>{
+        if(items.length===0) return alert('Ajouter au moins un article');
+        const rec = { id: uid(), date: new Date().toISOString(), supplier: wrap.querySelector('#sup').value.trim(), items, total: items.reduce((t,i)=>t+i.price*i.qty,0) };
+        // increment stock
+        items.forEach(it=>{ const p = state.products.find(x=>x.id===it.pid); if(p) p.qty += it.qty; });
+        state.purchases.unshift(rec); DB.write(state); closeModal(wrap); renderPurchases(); refreshDashboard();
+      };
+    }
+
+    /******************** Ventes (listing) ********************/
+    const saleList = document.getElementById('saleList');
+    document.getElementById('btnNewSale').onclick = ()=> showView('dashboard');
+    function renderSales(){
+      saleList.innerHTML = state.sales.map(s=>`<div class='p-3 rounded-2xl border bg-white flex justify-between items-center'>
+        <div><div class='font-semibold'>Vente #${s.id}</div><div class='text-xs text-slate-500'>${new Date(s.date).toLocaleString('fr-FR')} · ${s.items.length} article(s)</div></div>
+        <div class='flex items-center gap-2'>
+          <div class='font-semibold'>${fmt(s.items.reduce((t,i)=>t+i.price*i.qty,0), state.settings.currency)}</div>
+          <button data-print='${s.id}' class='px-3 py-1 rounded-xl bg-white border'>Ticket</button>
+        </div>
+      </div>`).join('');
+    }
+    saleList.addEventListener('click', (e)=>{
+      const b = e.target.closest('button[data-print]'); if(!b) return; const s = state.sales.find(x=>x.id===b.dataset.print); if(s) openReceipt(s);
+    });
+
+    /******************** Clients & Fournisseurs & Dépenses ********************/
+    const clientList = document.getElementById('clientList');
+    const supplierList = document.getElementById('supplierList');
+    const expenseList = document.getElementById('expenseList');
+    document.getElementById('btnNewClient').onclick = ()=> openEntityModal('clients');
+    document.getElementById('btnNewSupplier').onclick = ()=> openEntityModal('suppliers');
+    document.getElementById('btnNewExpense').onclick = ()=> openExpenseModal();
+
+    function renderClients(){ clientList.innerHTML = renderEntityCards('clients', 'Client'); }
+    function renderSuppliers(){ supplierList.innerHTML = renderEntityCards('suppliers', 'Fournisseur'); }
+    function renderExpenses(){
+      expenseList.innerHTML = state.expenses.map(x=>`<div class='p-3 rounded-2xl border bg-white flex justify-between'>
+        <div><div class='font-semibold'>${x.label}</div><div class='text-xs text-slate-500'>${new Date(x.date).toLocaleDateString('fr-FR')}</div></div>
+        <div class='font-semibold'>${fmt(x.amount, state.settings.currency)}</div>
+      </div>`).join('');
+    }
+
+    function renderEntityCards(key, label){
+      return state[key].map(x=>`<div class='p-3 rounded-2xl border bg-white flex justify-between items-center'>
+        <div>
+          <div class='font-semibold'>${x.name}</div>
+          <div class='text-xs text-slate-500'>${x.phone||''} ${x.email?('· '+x.email):''}</div>
+        </div>
+        <div class='flex gap-2'>
+          <button data-edit='${key}:${x.id}' class='px-3 py-1 rounded-xl bg-white border'>Modifier</button>
+          <button data-del='${key}:${x.id}' class='px-3 py-1 rounded-xl bg-rose-600 text-white'>Suppr.</button>
+        </div>
+      </div>`).join('');
+    }
+
+    document.getElementById('clientList').addEventListener('click', handleEntityClicks);
+    document.getElementById('supplierList').addEventListener('click', handleEntityClicks);
+    function handleEntityClicks(e){
+      const ed = e.target.closest('button[data-edit]'); if(ed){ const [key,id]=ed.dataset.edit.split(':'); const obj = state[key].find(x=>x.id===id); return openEntityModal(key,obj); }
+      const del = e.target.closest('button[data-del]'); if(del){ const [key,id]=del.dataset.del.split(':'); if(!confirm('Confirmer suppression ?')) return; state[key]=state[key].filter(x=>x.id!==id); DB.write(state); if(key==='clients') renderClients(); else renderSuppliers(); }
+    }
+
+    function openEntityModal(key, obj={}){
+      const id = obj.id || uid();
+      const title = (key==='clients'?'Client':'Fournisseur');
+      const wrap = modalShell(`<h3 class='font-semibold text-lg'>${obj.id?'Modifier':'Nouveau'} ${title}</h3>
+        <div class='grid md:grid-cols-2 gap-3 mt-3'>
+          <div><label class='text-sm'>Nom</label><input id='m_name' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${obj.name||''}' /></div>
+          <div><label class='text-sm'>Téléphone</label><input id='m_phone' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${obj.phone||''}' /></div>
+          <div><label class='text-sm'>Email</label><input id='m_email' type='email' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${obj.email||''}' /></div>
+          <div><label class='text-sm'>Adresse</label><input id='m_addr' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${obj.addr||''}' /></div>
+        </div>
+        <div class='mt-4 flex justify-end gap-2'>
+          <button data-close class='px-3 py-2 rounded-xl bg-white border'>Annuler</button>
+          <button id='m_save' class='px-3 py-2 rounded-xl bg-sky-600 text-white'>Enregistrer</button>
+        </div>`);
+      wrap.querySelector('#m_save').onclick = ()=>{
+        const item = { id, name: gv('#m_name',wrap), phone: gv('#m_phone',wrap), email: gv('#m_email',wrap), addr: gv('#m_addr',wrap) };
+        if(!item.name) return alert('Nom requis');
+        const arr = state[key]; const ex = arr.find(x=>x.id===id); if(ex) Object.assign(ex,item); else arr.unshift(item);
+        DB.write(state); closeModal(wrap); key==='clients'?renderClients():renderSuppliers();
+      };
+    }
+
+    function openExpenseModal(){
+      const wrap = modalShell(`<h3 class='font-semibold text-lg'>Nouvelle dépense</h3>
+        <div class='grid md:grid-cols-2 gap-3 mt-3'>
+          <div><label class='text-sm'>Libellé</label><input id='m_label' class='mt-1 w-full px-3 py-2 rounded-xl border' /></div>
+          <div><label class='text-sm'>Montant</label><input id='m_amount' type='number' step='0.01' class='mt-1 w-full px-3 py-2 rounded-xl border' /></div>
+          <div><label class='text-sm'>Date</label><input id='m_date' type='date' class='mt-1 w-full px-3 py-2 rounded-xl border' value='${todayISO()}' /></div>
+        </div>
+        <div class='mt-4 flex justify-end gap-2'>
+          <button data-close class='px-3 py-2 rounded-xl bg-white border'>Annuler</button>
+          <button id='m_save' class='px-3 py-2 rounded-xl bg-sky-600 text-white'>Enregistrer</button>
+        </div>`);
+      wrap.querySelector('#m_save').onclick = ()=>{
+        const rec = { id: uid(), label: gv('#m_label',wrap), amount: +gv('#m_amount',wrap)||0, date: gv('#m_date',wrap) };
+        if(!rec.label || !rec.amount) return alert('Champs requis');
+        state.expenses.unshift(rec); DB.write(state); closeModal(wrap); renderExpenses();
+      };
+    }
+
+    /******************** Rapports ********************/
+    const fromDate = document.getElementById('fromDate');
+    const toDate = document.getElementById('toDate');
+    const btnRunReport = document.getElementById('btnRunReport');
+    const reportSummary = document.getElementById('reportSummary');
+    const btnExportCSV = document.getElementById('btnExportCSV');
+
+    btnRunReport.onclick = ()=>{
+      const f = new Date(fromDate.value||'1970-01-01').getTime();
+      const t = new Date(toDate.value||'2999-12-31').getTime();
+      const sales = state.sales.filter(s=>{ const d=new Date(s.date).getTime(); return d>=f && d<=t; });
+      const total = sales.reduce((sum,s)=> sum + s.items.reduce((x,i)=>x+i.price*i.qty,0),0);
+      const items = sales.flatMap(s=>s.items);
+      const byProd = {};
+      items.forEach(i=>{ byProd[i.name] = (byProd[i.name]||0) + i.qty; });
+      const top = Object.entries(byProd).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      reportSummary.innerHTML = `<div>Total Ventes: <b>${fmt(total, state.settings.currency)}</b></div>` +
+        `<div class='mt-2'>Top produits:</div>`+
+        `<ul class='list-disc ml-6 text-sm text-slate-700'>${top.map(([n,q])=>`<li>${n}: ${q}</li>`).join('')}</ul>`;
+    };
+
+    btnExportCSV.onclick = ()=>{
+      const rows = [['id','date','produit','prix','qty','total']];
+      state.sales.forEach(s=>{
+        s.items.forEach(i=> rows.push([s.id, s.date, i.name, i.price, i.qty, i.price*i.qty]));
+      });
+      const csv = rows.map(r=> r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(',')).join('\n');
+      downloadFile('ventes.csv', 'text/csv', csv);
+    };
+
+    /******************** Export / Import / Reset ********************/
+    const btnExport = document.getElementById('btnExport');
+    const importFile = document.getElementById('importFile');
+    const btnReset = document.getElementById('btnReset');
+
+    btnExport.onclick = ()=>{
+      const payload = JSON.stringify(state, null, 2);
+      downloadFile('commerce_backup.json','application/json', payload);
+    };
+    importFile.onchange = (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      const r = new FileReader(); r.onload = ()=>{ try{ const d=JSON.parse(r.result); state = DB.write(d); bootstrap(); alert('Import réussi'); } catch(err){ alert('Fichier invalide'); } }; r.readAsText(f);
+    };
+    btnReset.onclick = ()=>{
+      const pin = prompt('Confirmez votre PIN admin');
+      if(pin !== state.settings.adminPin) return alert('PIN incorrect');
+      if(!confirm('Supprimer toutes les données ?')) return;
+      DB.reset(); state = DB.read(); bootstrap(); alert('Réinitialisé');
+    };
+
+    /******************** Modal helper ********************/
+    const modals = document.getElementById('modals');
+    function modalShell(inner){
+      const wrap = document.createElement('div');
+      wrap.className = 'fixed inset-0 z-50 flex items-center justify-center';
+      wrap.innerHTML = `<div class='absolute inset-0 bg-black/20' data-close></div>
+        <div class='relative z-10 w-[min(680px,92vw)] rounded-2xl bg-white p-4 border'>${inner}</div>`;
+      modals.appendChild(wrap);
+      wrap.addEventListener('click', (e)=>{ if(e.target.matches('[data-close]')) closeModal(wrap) });
+      return wrap;
+    }
+    function closeModal(w){ w.remove(); }
+    function gv(sel, root=document){ return root.querySelector(sel)?.value?.trim()||'' }
+    function downloadFile(name, type, content){
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], {type})); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+    }
+
+    /******************** Simple PWA (installable + offline) ********************/
+    // Create a manifest on the fly
+    const manifest = { name:"Gestion de Commerce", short_name:"Commerce", start_url:".", display:"standalone", background_color:"#0ea5e9", theme_color:"#0ea5e9", icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%230ea5e9'/><text x='50%' y='58%' font-size='52' text-anchor='middle' fill='white' font-family='Arial, Helvetica, sans-serif'>GC</text></svg>", sizes:"96x96", type:"image/svg+xml"}] };
+    const mlink = document.createElement('link'); mlink.rel='manifest'; mlink.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/json'})); document.head.appendChild(mlink);
+
+    // Register a basic service worker for offline cache of this page
+    if('serviceWorker' in navigator){
+      const swCode = `self.addEventListener('install', e=>{ e.waitUntil(caches.open('gc-cache-v1').then(c=>c.addAll(['./'])) )});
+        self.addEventListener('fetch', e=>{ e.respondWith(caches.match(e.request).then(r=> r || fetch(e.request).then(resp=>{ try{ const copy=resp.clone(); caches.open('gc-cache-v1').then(c=>c.put(e.request, copy)); }catch(e){} return resp; }))) });`;
+      const blob = new Blob([swCode], {type:'text/javascript'});
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl).catch(()=>{});
+    }
+
+    /******************** Bootstrap ********************/
+    function bootstrap(){
+      renderNav(); showView(activeView); loadSettings(); updateUser();
+      if(state.products.length===0){
+        // seed minimal demo
+        state.products = [
+          {id:uid(), name:'Riz 25kg', sku:'RIZ25', price:19000, qty:10},
+          {id:uid(), name:'Huile 5L', sku:'HUI5', price:8500, qty:15},
+          {id:uid(), name:'Sucre 1kg', sku:'SUG1', price:900, qty:40}
+        ];
+        DB.write(state);
+      }
+      refreshDashboard();
+    }
+
+    // Global listeners
+    document.addEventListener('DOMContentLoaded', bootstrap);
+  </script>
+</body>
+</html>
